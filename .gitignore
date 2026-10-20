@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+work/
+artifacts/
+*.pem
+*.key
+.local-secrets/
+/supabase/
+.DS_Store

@@ -1,0 +1,105 @@
+name: CMP Build
+on:
+  push:
+    branches: [main]
+    paths: [history.md]
+permissions: {}
+jobs:
+  build:
+    if: startsWith(github.event.head_commit.message, '[cmp-build:publish] ') || startsWith(github.event.head_commit.message, '[cmp-build:debug] ')
+    runs-on: macos-26
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+      DEBUG_RUN: ${{ startsWith(github.event.head_commit.message, '[cmp-build:debug] ') }}
+    timeout-minutes: 360
+    concurrency:
+      group: ${{ startsWith(github.event.head_commit.message, '[cmp-build:debug] ') && format('cmp-maven-local-{0}', github.run_id) || 'cmp-maven-publication' }}
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      claimed: ${{ steps.compile.outputs.claimed }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+          set-safe-directory: false
+      - name: Check Xcode 26.5
+        run: xcodebuild -version
+      - uses: actions/setup-python@v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Install credential encryption support
+        if: startsWith(github.event.head_commit.message, '[cmp-build:publish] ')
+        run: python -m pip install --disable-pip-version-check cryptography==50.0.2
+      - uses: actions/setup-java@v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - id: harmony-cache
+        name: Restore HarmonyOS tools
+        continue-on-error: true
+        uses: actions/cache/restore@v5.1.0
+        with:
+          path: ${{ runner.temp }}/harmony-tools
+          key: harmony-${{ runner.os }}-${{ runner.arch }}-6.1.1.280-v2
+      - id: compile
+        name: Validate request, build and publish with Gradle
+        env:
+          MAVEN_CREDENTIAL_PRIVATE_KEY: ${{ startsWith(github.event.head_commit.message, '[cmp-build:publish] ') && secrets.MAVEN_CREDENTIAL_PRIVATE_KEY || '' }}
+        run: python -u scripts/build.py --workspace work
+      - id: har
+        name: Save HAR
+        if: steps.compile.outputs.built == 'true'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: compose-${{ steps.compile.outputs.version }}-${{ github.run_id }}
+          path: work/har/*.har
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Generate release information with real HAR download link
+        if: steps.compile.outputs.built == 'true'
+        env:
+          HAR_URL: ${{ steps.har.outputs.artifact-url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python -u scripts/build.py --workspace work --report-only
+      - name: Save release information
+        if: steps.compile.outputs.built == 'true'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: release-info-${{ steps.compile.outputs.version }}-${{ github.run_id }}
+          path: work/release-info/*.md
+          retention-days: 30
+          if-no-files-found: error
+      - name: Save HarmonyOS tools
+        if: ${{ !cancelled() && steps.compile.outputs.harmony_ready == 'true' && steps.harmony-cache.outputs.cache-hit != 'true' }}
+        continue-on-error: true
+        uses: actions/cache/save@v5.1.0
+        with:
+          path: ${{ runner.temp }}/harmony-tools
+          key: ${{ steps.harmony-cache.outputs.cache-primary-key }}
+  finish:
+    needs: build
+    if: always() && needs.build.outputs.claimed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+          show-progress: false
+          set-safe-directory: false
+      - name: Record final task status
+        env:
+          TASK_RESULT: ${{ needs.build.result == 'success' && 'succeeded' || 'failed' }}
+        run: python3 -u scripts/validate.py --finish
