@@ -132,7 +132,7 @@ def write_report(report,output_dir):
     url(report.get('run_url'))
     if artifact:url(artifact.get('download_url'))
     if publication:url(publication['maven_url'])
-    title='CMP-'+now.strftime('%Y-%m-%d')+'-发布信息'
+    title='CMP-'+release+'-发布信息'
     lines=['# '+title,'',f'- Compose 版本：`{cell(release)}`',f'- 发布状态：{status}',f'- 报告生成时间：{now.strftime("%Y-%m-%d %H:%M:%S")}（北京时间）']
     platform_names={'android':'Android','ohos':'OHOS','uikit':'UIKit'}
     lines.append('- 构建平台：'+'、'.join(platform_names[name] for name in report['platforms']))

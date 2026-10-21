@@ -59,23 +59,24 @@ jobs:
         if: steps.compile.outputs.har_built == 'true'
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: compose-${{ steps.compile.outputs.version }}-${{ github.run_id }}
-          path: work/har/*.har
+          path: work/har/compose-${{ steps.compile.outputs.version }}.har
+          archive: false
           if-no-files-found: error
           retention-days: 30
-          compression-level: 0
       - name: Generate release information
         if: steps.compile.outputs.built == 'true'
         env:
           HAR_URL: ${{ steps.har.outputs.artifact-url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: python -u scripts/build.py --workspace work --report-only
+        run: |
+          python -u scripts/build.py --workspace work --report-only
+          cat work/release-info/*.md >> "$GITHUB_STEP_SUMMARY"
       - name: Save release information
         if: steps.compile.outputs.built == 'true'
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: release-info-${{ steps.compile.outputs.version }}-${{ github.run_id }}
-          path: work/release-info/*.md
+          path: work/release-info/CMP-${{ steps.compile.outputs.version }}-发布信息.md
+          archive: false
           retention-days: 30
           if-no-files-found: error
       - name: Save HarmonyOS tools

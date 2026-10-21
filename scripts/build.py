@@ -220,6 +220,19 @@ def configure_platforms(cmp,platforms):
                     raise ValueError('Cannot safely make CMP '+name+' optional')
                 text=re.sub(pattern,'findByName("'+name+'")?.apply {',text)
         path.write_text(text)
+    if 'ohos' in platforms and 'uikit' not in platforms:
+        path=cmp/'components/resources/library/build.gradle.kts';text=path.read_text()
+        skiko='''
+val ohosSkikoDependency = "org.jetbrains.skiko:skiko:${libs.versions.ohosSkiko.get()}"
+configurations.configureEach {
+    resolutionStrategy.force(ohosSkikoDependency)
+}
+kotlin.sourceSets.named("skikoMain") {
+    dependencies { implementation(ohosSkikoDependency) }
+}
+'''
+        if skiko.strip() not in text:path.write_text(text.rstrip()+'\n'+skiko)
+        log('CMP resources: shared OHOS metadata uses the configured Skiko version')
     log('Core/CMP publication platforms: '+selected)
 
 def prepare(request,workspace):
