@@ -11,8 +11,11 @@ function unconfirmed(){const error=new Error('提交结果未确认，请重试�
 export const normalizeSuffix=value=>value.trim().replace(/^-+/,'');
 export const validSuffix=value=>/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value)&&/[0-9]$/.test(value)&&!/^1\.(12\.0|9\.2)/.test(value);
 
-export function buildRequest(branches,dependencies,suffix,url,{mode='publish',debug_enabled=false,trace=false,ltpo=false}={}){
+export function buildRequest(branches,dependencies,suffix,url,{mode='publish',platforms=['ohos'],debug_enabled=false,trace=false,ltpo=false}={}){
  if(!['debug','publish'].includes(mode))throw new Error('构建模式无效');
+ if(!Array.isArray(platforms)||!platforms.length)throw new Error('请至少选择一个构建平台');
+ const selectedPlatforms=['android','ohos','uikit'].filter(value=>platforms.includes(value));
+ if(selectedPlatforms.length!==platforms.length)throw new Error('构建平台无效');
  if(typeof debug_enabled!=='boolean'||typeof trace!=='boolean'||typeof ltpo!=='boolean')throw new Error('构建开关无效');
  const sources={};
  for(const [key,repository] of Object.entries({core:'CPF-KMP-CMP/compose-multiplatform-core',cmp:'CPF-KMP-CMP/compose-multiplatform'})){
@@ -35,7 +38,8 @@ export function buildRequest(branches,dependencies,suffix,url,{mode='publish',de
    choices[key].version=v;
   }
  }
- const request={schema_version:1,sources,suffix,dependencies:choices,build_options:{debug_enabled,trace,ltpo}};
+ const ohos=selectedPlatforms.includes('ohos');
+ const request={schema_version:1,sources,suffix,platforms:selectedPlatforms,dependencies:choices,build_options:{debug_enabled:ohos&&debug_enabled,trace:ohos&&trace,ltpo:ohos&&ltpo}};
  if(mode==='publish')request.publish_url=publicationURL(url);
  return request;
 }

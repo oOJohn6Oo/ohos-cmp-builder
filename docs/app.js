@@ -16,9 +16,13 @@ const deps = [
 const state = {branches:{}, dependencies:{}};
 function element(tag, text, cls) {const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el;}
 const dependencyRepositories=['inner','public'];
+const platformLabels={android:'Android',ohos:'OHOS',uikit:'UIKit'};
+function selectedPlatforms(){return [...document.querySelectorAll('input[name="platform"]:checked')].map(input=>input.value);}
 function suffix(){return normalizeSuffix($('suffix').value);}
 function updateSummary(){
- const items=[['CMP Core',state.branches.core?.name||'未选择'],['CMP',state.branches.cmp?.name||'未选择'],['依赖覆盖',`${Object.values(state.dependencies).filter(x=>x.mode!=='default').length} 项`],['发布版本',suffix()?`1.12.0-${suffix()}`:'—'],['发布目标',$('publish-url').value.trim()||'未填写']];
+ const platforms=selectedPlatforms();
+ for(const id of ['build-debug','build-trace','build-ltpo'])$(id).disabled=!platforms.includes('ohos');
+ const items=[['CMP Core',state.branches.core?.name||'未选择'],['CMP',state.branches.cmp?.name||'未选择'],['构建平台',platforms.map(value=>platformLabels[value]).join(' / ')||'未选择'],['依赖覆盖',`${Object.values(state.dependencies).filter(x=>x.mode!=='default').length} 项`],['发布版本',suffix()?`1.12.0-${suffix()}`:'—'],['发布目标',$('publish-url').value.trim()||'未填写']];
  $('summary').replaceChildren(...items.flatMap(([a,b])=>[element('dt',a),element('dd',b)]));
  $('full-version').textContent=suffix()?`1.12.0-${suffix()}`:'1.12.0-…';
  const suffixInvalid=Boolean($('suffix').value)&&!validSuffix(suffix());
@@ -138,7 +142,7 @@ function setPhase(next,mode=activeMode){
 }
 function currentRequest(mode){
  const dependencies=Object.fromEntries(Object.entries(state.dependencies).map(([key,item])=>[key,{mode:item.mode,version:item.readVersion()}]));
- return buildRequest(state.branches,dependencies,$('suffix').value,mode==='publish'?$('publish-url').value:undefined,{mode,debug_enabled:$('build-debug').checked,trace:$('build-trace').checked,ltpo:$('build-ltpo').checked});
+ return buildRequest(state.branches,dependencies,$('suffix').value,mode==='publish'?$('publish-url').value:undefined,{mode,platforms:selectedPlatforms(),debug_enabled:$('build-debug').checked,trace:$('build-trace').checked,ltpo:$('build-ltpo').checked});
 }
 function showTask(status,message,url){
  const link=element('a','查看构建任务');link.href=url;link.target='_blank';link.rel='noopener noreferrer';

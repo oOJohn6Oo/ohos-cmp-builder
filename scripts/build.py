@@ -199,6 +199,29 @@ def configure_gradle(core,cmp):
         if updated!=text: path.write_bytes(updated.encode('utf-8'))
         log('Gradle: '+label+' → official '+archive)
 
+def configure_platforms(cmp,platforms):
+    selected=','.join(platforms)
+    path=cmp/'scripts/build-ohos.sh';text=path.read_text()
+    matches=[match for match in re.finditer(r'-Pcompose\.platforms=([^\s"\x27]+)',text)
+             if not text[text.rfind('\n',0,match.start())+1:match.start()].lstrip().startswith('#')]
+    if len(matches)!=1:raise ValueError('Expected one compose.platforms argument in CMP scripts/build-ohos.sh')
+    match=matches[0]
+    if not re.fullmatch(r'(?:[a-z]+(?:,[a-z]+)*|\$[A-Za-z_]\w*|\$\{[A-Za-z_]\w*(?::-[a-z]+(?:,[a-z]+)*)?\})',match.group(1)):
+        raise ValueError('Unsupported compose.platforms argument in CMP scripts/build-ohos.sh')
+    text=text[:match.start(1)]+selected+text[match.end(1):]
+    path.write_text(text)
+    subprocess.run(['bash','-n',str(path)],check=True)
+    if platforms==['android']:
+        path=cmp/'components/resources/library/build.gradle.kts';text=path.read_text()
+        for name in ('nativeMain','nativeTest'):
+            pattern=r'\bval\s+'+name+r'\s+by\s+getting\s*\{'
+            if re.search(pattern,text):
+                if len(re.findall(r'\b'+name+r'\b',masks(text)[1]))!=1:
+                    raise ValueError('Cannot safely make CMP '+name+' optional')
+                text=re.sub(pattern,'findByName("'+name+'")?.apply {',text)
+        path.write_text(text)
+    log('Core/CMP publication platforms: '+selected)
+
 def prepare(request,workspace):
     for key in ('core','cmp'):
         source=request['sources'][key];destination=workspace/key
@@ -213,6 +236,7 @@ def prepare(request,workspace):
         log(key+' source ready; branch='+source['branch']+'; SHA='+actual)
     core=workspace/'core';cmp=workspace/'cmp'
     with stage('Gradle distribution configuration'): configure_gradle(core,cmp)
+    with stage('publication platforms'): configure_platforms(cmp,request['platforms'])
     with stage('Maven repository configuration'): apply(core,cmp)
     cv=versions(core/'gradle/libs.versions.toml');mv=versions(cmp/'components/gradle/libs.versions.toml')
     defaults={'kotlin':cv['kotlin'],'skiko':cv['skikoOhos'],'coroutines_core':cv['kotlinCoroutines'],'coroutines_cmp':mv['kotlinx-coroutines'],'serialization':cv['kotlinSerialization'],'atomicfu':cv['atomicFu'],'datetime':cv['datetime'],'okio':cv['okio']}
@@ -328,7 +352,7 @@ def compile_sources(workspace, request, debug, credentials=None):
     for key in ('MAVEN_USERNAME','MAVEN_PASSWORD','MAVEN_CREDENTIAL_PRIVATE_KEY','CREDENTIAL_ENVELOPE','REQUEST_JSON','COMPOSE_CUSTOM_VERSION','COMPOSE_GRADLE_PLUGIN_VERSION','COMPOSE_REPO_USERNAME','COMPOSE_REPO_KEY','COMPOSE_REPO_URL'):
         child_env.pop(key,None)
     core_task=':mpp:publishComposeJbToMavenLocal' if debug else ':mpp:publishComposeJb'
-    core_command=['./gradlew',core_task,'-Pcompose.platforms=android,ohos,uikit','-Pjetbrains.publication.version.COMPOSE='+release,'--no-configuration-cache','--console=plain']
+    core_command=['./gradlew',core_task,'-Pcompose.platforms='+','.join(request['platforms']),'-Pjetbrains.publication.version.COMPOSE='+release,'--no-configuration-cache','--console=plain']
     for option,property_name in [('debug_enabled','androidx.kLogLevel'),('trace','androidx.ohosTraceEnabled'),('ltpo','androidx.ohosLtpoDiagnostics')]:
         enabled=build_options[option]
         if type(enabled) is not bool: raise ValueError('Build options must be booleans')
@@ -351,7 +375,9 @@ def compile_sources(workspace, request, debug, credentials=None):
         try:
             with stage(owner+' '+('local' if debug else 'remote')+' publication'):
                 log('Task: '+core_task if owner=='core' else 'CMP: build-ohos.sh '+(' --local' if debug else ' --remote')+' --skip-html')
-                log('Debug logs='+str(build_options['debug_enabled']).lower()+'; Trace='+str(build_options['trace']).lower()+'; LTPO='+str(build_options['ltpo']).lower())
+                log('Platforms: '+','.join(request['platforms']))
+                if 'ohos' in request['platforms']:
+                    log('Debug logs='+str(build_options['debug_enabled']).lower()+'; Trace='+str(build_options['trace']).lower()+'; LTPO='+str(build_options['ltpo']).lower())
                 subprocess.run(command,cwd=workspace/owner,env=child_env,check=True)
             if record:record['components'][owner]='succeeded'
         finally:
@@ -360,7 +386,9 @@ def compile_sources(workspace, request, debug, credentials=None):
                 write_json(workspace/'publication.json',record)
     child_env.clear()
     core_command.clear()
-    with stage('HAR compilation'): build_har(workspace/'core',workspace/'har',release)
+    if 'ohos' in request['platforms']:
+        with stage('HAR compilation'): build_har(workspace/'core',workspace/'har',release)
+        with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('har_built=true\n')
 
 
 def main():
@@ -371,8 +399,9 @@ def main():
     args=parser.parse_args();workspace=Path(args.workspace).resolve();workspace.mkdir(parents=True,exist_ok=True)
     if args.report_only:
         request=json.loads((workspace/'request.json').read_text())
+        has_har='ohos' in request['platforms']
         with stage('release information'):
-            outputs=generate(SimpleNamespace(core=str(workspace/'core'),cmp=str(workspace/'cmp'),har=str(workspace/'har'/('compose-'+request['compose_version']+'.har')),output_dir=str(workspace/'release-info'),har_url=os.environ['HAR_URL'],run_url=os.environ.get('RUN_URL'),core_branch=request['sources']['core']['branch'],cmp_branch=request['sources']['cmp']['branch'],publication_record=None if args.debug else str(workspace/'publication.json'),local_only=args.debug,build_options=request['build_options']))
+            outputs=generate(SimpleNamespace(core=str(workspace/'core'),cmp=str(workspace/'cmp'),har=str(workspace/'har'/('compose-'+request['compose_version']+'.har')) if has_har else None,output_dir=str(workspace/'release-info'),har_url=os.environ['HAR_URL'] if has_har else None,run_url=os.environ.get('RUN_URL'),core_branch=request['sources']['core']['branch'],cmp_branch=request['sources']['cmp']['branch'],publication_record=None if args.debug else str(workspace/'publication.json'),local_only=args.debug,build_options=request['build_options'],platforms=request['platforms']))
         for output in outputs: log('Release information saved: '+output.name)
         return
     private=os.environ.pop('MAVEN_CREDENTIAL_PRIVATE_KEY','')
@@ -390,13 +419,13 @@ def main():
     del task,private
     write_json(workspace/'request.json',request)
     with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('version='+request['compose_version']+'\n')
-    log('Version='+request['compose_version']+'; mode='+('debug (Maven Local)' if args.debug else 'publish'))
+    log('Version='+request['compose_version']+'; platforms='+','.join(request['platforms'])+'; mode='+('debug (Maven Local)' if args.debug else 'publish'))
     with stage('source preparation'): prepare(request,workspace)
     with stage('HarmonyOS environment'): install_harmony()
     with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('harmony_ready=true\n')
     compile_sources(workspace,request,args.debug,credentials)
     with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('built=true\n')
-    if args.debug: log('Debug complete: Core and CMP published to Maven Local; HAR built; remote publication skipped')
+    if args.debug: log('Debug complete: Core and CMP published to Maven Local'+('; HAR built' if 'ohos' in request['platforms'] else '')+'; remote publication skipped')
 
 if __name__=='__main__':
     try: main()

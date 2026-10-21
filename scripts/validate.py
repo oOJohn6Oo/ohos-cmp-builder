@@ -15,6 +15,7 @@ import urllib.request
 
 REPOS={'core':'CPF-KMP-CMP/compose-multiplatform-core','cmp':'CPF-KMP-CMP/compose-multiplatform'}
 DEPENDENCIES=('kotlin','skiko','coroutines_core','coroutines_cmp','serialization','atomicfu','datetime','okio')
+PLATFORMS=('android','ohos','uikit')
 SUBMIT_URL='https://vjmzpjoqgjuvlaubmjgm.supabase.co/functions/v1/submit-build'
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -98,12 +99,16 @@ def version(value):
     return value
 
 def validate(data,debug=False):
-    fields={'schema_version','sources','suffix','publish_url','dependencies','build_options'}
+    fields={'schema_version','sources','suffix','publish_url','dependencies','build_options','platforms'}
     if debug:fields.add('submission_nonce')
     if not isinstance(data,dict) or set(data)-fields:raise ValueError('Unknown request fields (credentials are not allowed)')
     if type(data.get('schema_version')) is not int or data.get('schema_version')!=1:raise ValueError('Unsupported schema version')
     nonce=data.get('submission_nonce')
     if 'submission_nonce' in data and (not isinstance(nonce,str) or not re.fullmatch(r'[0-9a-f]{32}',nonce)):raise ValueError('Invalid submission nonce')
+    platforms=data.get('platforms',list(PLATFORMS))
+    if not isinstance(platforms,list) or not platforms or any(not isinstance(value,str) or value not in PLATFORMS for value in platforms) or len(set(platforms))!=len(platforms):
+        raise ValueError('Select one or more unique platforms: android, ohos, uikit')
+    platforms=[value for value in PLATFORMS if value in platforms]
     options=data.get('build_options',{})
     if not isinstance(options,dict) or set(options)-{'debug_enabled','trace','ltpo'} or any(type(value) is not bool for value in options.values()):raise ValueError('Build options must be boolean debug_enabled, trace and ltpo switches')
     suffix=data.get('suffix','')
@@ -126,8 +131,8 @@ def validate(data,debug=False):
         normalized[key]={'mode':item['mode']}
         if item['mode']=='custom':normalized[key]['version']=version(item.get('version'))
         elif item.get('version') is not None:raise ValueError('Only custom mode accepts a version')
-    request=dict(schema_version=1,sources=sources,suffix=suffix,compose_version='1.12.0-'+suffix,dependencies=normalized,
-                 build_options={key:options.get(key,False) for key in ('debug_enabled','trace','ltpo')})
+    request=dict(schema_version=1,sources=sources,suffix=suffix,compose_version='1.12.0-'+suffix,dependencies=normalized,platforms=platforms,
+                 build_options={key:'ohos' in platforms and options.get(key,False) for key in ('debug_enabled','trace','ltpo')})
     if not debug:request['publish_url']=publication_url(data.get('publish_url'))
     return request
 

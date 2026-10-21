@@ -31,6 +31,11 @@
       </section>
       <section aria-labelledby="build-options-title">
         <div class="section-title"><h2 id="build-options-title">构建选项</h2></div>
+        <div class="platform-options" role="group" aria-label="构建平台">
+          <label><input type="checkbox" name="platform" value="android">Android</label>
+          <label><input type="checkbox" name="platform" value="ohos" checked>OHOS</label>
+          <label><input type="checkbox" name="platform" value="uikit">UIKit</label>
+        </div>
         <label class="switch-row"><span>Debug 日志</span><input id="build-debug" type="checkbox" role="switch"></label>
         <label class="switch-row"><span>Trace</span><input id="build-trace" type="checkbox" role="switch"></label>
         <label class="switch-row" title="LTPO 日志需开启 Debug 日志；LTPO Trace 输出需开启 Trace"><span>LTPO</span><input id="build-ltpo" type="checkbox" role="switch"></label>

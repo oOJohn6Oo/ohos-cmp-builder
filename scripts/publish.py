@@ -83,7 +83,7 @@ def inspect_har(path):
     return dict(file=path.name,package_version=manifest['version'],bytes=path.stat().st_size,sha256=digest.hexdigest(),md5=md5.hexdigest())
 
 def generate(args):
-    core=Path(args.core); cmp=Path(args.cmp); har=Path(args.har)
+    core=Path(args.core); cmp=Path(args.cmp)
     gp=properties(core/'gradle.properties'); cp=properties(cmp/'components/gradle.properties'); pp=properties(cmp/'gradle-plugins/gradle.properties')
     cv=versions(core/'gradle/libs.versions.toml'); mv=versions(cmp/'components/gradle/libs.versions.toml'); pv=versions(cmp/'gradle-plugins/gradle/libs.versions.toml')
     release=gp['jetbrains.publication.version.COMPOSE']
@@ -92,9 +92,12 @@ def generate(args):
         if version!=release: raise ValueError('Core/CMP publication versions differ')
     if len({cv['kotlin'],cv['composeCompilerPlugin'],cp['kotlin.version'],pv['kotlin']})!=1: raise ValueError('Kotlin / Compose Compiler versions differ')
     if cv['skikoOhos'] != mv['ohosSkiko']: raise ValueError('Core/CMP OHOS Skiko versions differ')
-    artifact=inspect_har(har)
-    if artifact['package_version']!=release: raise ValueError('HAR package version does not match source configuration')
-    artifact['download_url']=url(args.har_url)
+    artifact=None
+    if 'ohos' in args.platforms:
+        if not args.har: raise ValueError('OHOS builds require a HAR artifact')
+        artifact=inspect_har(Path(args.har))
+        if artifact['package_version']!=release: raise ValueError('HAR package version does not match source configuration')
+        artifact['download_url']=url(args.har_url)
     products=[dict(name=name,coordinate=coord,version=gp['jetbrains.publication.version.'+key]) for name,coord,key in PRODUCTS]
     deps=[
       ('Kotlin（Core / CMP 插件 / CMP components）',cv['kotlin']),('Compose Compiler',cv['composeCompilerPlugin']),
@@ -119,19 +122,23 @@ def generate(args):
     now=datetime.now(ZoneInfo('Asia/Shanghai'))
     sources={'CMP-Core':baseline(core,args.core_branch),'CMP':baseline(cmp,args.cmp_branch)}
     report=dict(schema_version=1,compose_version=release,status=status,generated_at=now.isoformat(),publication=publication,
-                dependencies=dict(deps),products=products,har=artifact,sources=sources,run_url=url(args.run_url),build_options=args.build_options)
+                dependencies=dict(deps),products=products,har=artifact,sources=sources,run_url=url(args.run_url),build_options=args.build_options,platforms=args.platforms)
     return write_report(report,args.output_dir)
 
 def write_report(report,output_dir):
     now=datetime.fromisoformat(report['generated_at']).astimezone(ZoneInfo('Asia/Shanghai'))
     release=report['compose_version'];status=report['status'];publication=report['publication']
     artifact=report['har'];sources=report['sources'];products=report['products'];deps=report['dependencies'].items()
-    url(report.get('run_url'));url(artifact.get('download_url'))
+    url(report.get('run_url'))
+    if artifact:url(artifact.get('download_url'))
     if publication:url(publication['maven_url'])
     title='CMP-'+now.strftime('%Y-%m-%d')+'-发布信息'
     lines=['# '+title,'',f'- Compose 版本：`{cell(release)}`',f'- 发布状态：{status}',f'- 报告生成时间：{now.strftime("%Y-%m-%d %H:%M:%S")}（北京时间）']
-    for name,key in [('Debug 日志','debug_enabled'),('Trace','trace'),('LTPO','ltpo')]:
-        lines.append('- '+name+'：'+('开启' if report['build_options'][key] else '关闭'))
+    platform_names={'android':'Android','ohos':'OHOS','uikit':'UIKit'}
+    lines.append('- 构建平台：'+'、'.join(platform_names[name] for name in report['platforms']))
+    if 'ohos' in report['platforms']:
+        for name,key in [('Debug 日志','debug_enabled'),('Trace','trace'),('LTPO','ltpo')]:
+            lines.append('- '+name+'：'+('开启' if report['build_options'][key] else '关闭'))
     if status=='已发布到 Maven Local':
         lines += ['- Maven 仓库：Runner 本地 Maven（任务结束后释放）']
     if publication:
@@ -139,13 +146,15 @@ def write_report(report,output_dir):
     if report['run_url']: lines.append(f'- 构建记录：[查看 GitHub Actions]({report["run_url"]})')
     lines += ['', '## 构建依赖','', '| 依赖 | 本次版本 |','| --- | --- |']
     lines += [f'| {cell(name)} | `{cell(version)}` |' for name,version in deps]
-    lines += ['', '## 发布产物' if status=='已发布' else '## 产物版本清单', '', '| 库 | Maven 坐标 / 插件 ID | 本次版本 |','| --- | --- | --- |']
+    lines += ['', '## 组件版本', '', '本表列出组件版本配置；平台产物按本次选择及源码发布任务确定。', '', '| 库 | Maven 坐标 / 插件 ID | 本次版本 |','| --- | --- | --- |']
     lines += [f'| {cell(p["name"])} | {cell(p["coordinate"])} | `{cell(p["version"])}` |' for p in products]
     if status=='已发布到 Maven Local': lines += ['', '> 本次仅发布到 Maven Local，未上传远端 Maven 仓库。']
     elif status!='已发布': lines += ['', '> 这是源码配置中的产物版本清单，不表示所有 Maven 产物已上传成功。']
-    lines += ['', '## HAR','',f'- 文件：`{cell(artifact["file"])}`',f'- 包内版本：`{cell(artifact["package_version"])}`',f'- 大小：{artifact["bytes"]:,} 字节',f'- MD5：`{artifact["md5"]}`',f'- SHA-256：`{artifact["sha256"]}`']
-    lines += [f'- 下载入口：[下载 HAR / 查看构建产物]({artifact["download_url"]})' if artifact['download_url'] else '- 下载入口：尚未上传，当前仅有本地文件。']
-    lines += ['', '此 HAR 与上述 Core、CMP 版本配套使用。下载入口可能需要仓库访问权限；产物保留期由上传配置决定。', '', '## 代码基线','', '| 仓库 | 分支 | Commit | 提交说明 | 作者 | 日期 | 工作区 |','| --- | --- | --- | --- | --- | --- | --- |']
+    if artifact:
+        lines += ['', '## HAR','',f'- 文件：`{cell(artifact["file"])}`',f'- 包内版本：`{cell(artifact["package_version"])}`',f'- 大小：{artifact["bytes"]:,} 字节',f'- MD5：`{artifact["md5"]}`',f'- SHA-256：`{artifact["sha256"]}`']
+        lines += [f'- 下载入口：[下载 HAR / 查看构建产物]({artifact["download_url"]})' if artifact['download_url'] else '- 下载入口：尚未上传，当前仅有本地文件。']
+        lines += ['', '此 HAR 与上述 Core、CMP 版本配套使用。下载入口可能需要仓库访问权限；产物保留期由上传配置决定。']
+    lines += ['', '## 代码基线','', '| 仓库 | 分支 | Commit | 提交说明 | 作者 | 日期 | 工作区 |','| --- | --- | --- | --- | --- | --- | --- |']
     for name,s in sources.items():
         lines.append('| '+' | '.join(cell(v) for v in [name,s['branch'],s['commit'],s['subject'],s['author'],s['date'],'含未提交修改' if s['working_tree_modified'] else '干净'])+' |')
     lines += ['', '> 版本对齐脚本会产生未提交修改；Commit 表示源码基线，实际依赖版本以上表为准。','']
