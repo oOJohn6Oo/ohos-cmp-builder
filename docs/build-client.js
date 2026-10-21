@@ -62,6 +62,21 @@ export async function getBuildStatus(id,{fetcher=fetch,signal}={}){
  return {id:result.id,status:result.status};
 }
 
+async function checkBuildAvailability(fetcher){
+ let response;
+ try{
+  response=await fetcher(`${STATUS_API}?status=in.(pending,running)&select=id::text,status&limit=1`,{
+   headers:{apikey:PUBLISHABLE_KEY},
+   credentials:'omit',cache:'no-store',redirect:'error',signal:AbortSignal.timeout(20000),
+  });
+ }catch{throw new Error('暂时无法检查构建状态，请稍后重试');}
+ if(!response.ok)throw new Error(`暂时无法检查构建状态（HTTP ${response.status}）`);
+ let rows;
+ try{rows=await response.json();}catch{throw new Error('构建状态响应无效');}
+ if(!Array.isArray(rows)||rows.length>1||rows.some(row=>!validTaskID(row?.id)||!['pending','running'].includes(row.status)))throw new Error('构建状态响应无效');
+ if(rows.length)throw new Error(`任务 #${rows[0].id} ${rows[0].status==='pending'?'正在等待运行':'正在运行'}，请稍后再试`);
+}
+
 export function forgetFailedBuild(id){
  for(const [key,attempt] of attempts)if(attempt.result?.id===id||attempt.failed?.id===id)attempts.delete(key);
 }
@@ -93,9 +108,11 @@ export async function submitBuild(mode,request,credentials,{fetcher=fetch,public
  if(attempt.failed)throw attempt.failed;
  if(attempt.pending)return attempt.pending;
  attempt.pending=(async()=>{
+  if(!attempt.sent)await checkBuildAvailability(fetcher);
   const encrypted=await attempt.encrypted;
   let response;
   try{
+   attempt.sent=true;
    response=await fetcher(API,{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({mode,request_json:attempt.serialized,credentials:encrypted}),
@@ -107,6 +124,7 @@ export async function submitBuild(mode,request,credentials,{fetcher=fetch,public
   if(!result||typeof result!=='object')throw unconfirmed();
   const id=validTaskID(result.id)?result.id:null;
   if(!response.ok){
+   if(response.status===409&&!id)attempt.sent=false;
    const message=typeof result.error==='string'?result.error:`提交失败（HTTP ${response.status}）`;
    const error=new Error(id?`任务 #${id}：${message}`:message);
    error.id=id;error.status=result.status;

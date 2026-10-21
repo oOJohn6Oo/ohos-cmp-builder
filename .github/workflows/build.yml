@@ -13,7 +13,7 @@ jobs:
       DEBUG_RUN: ${{ startsWith(github.event.head_commit.message, '[cmp-build:debug] ') }}
     timeout-minutes: 360
     concurrency:
-      group: ${{ startsWith(github.event.head_commit.message, '[cmp-build:debug] ') && format('cmp-maven-local-{0}', github.run_id) || 'cmp-maven-publication' }}
+      group: cmp-maven-publication
       cancel-in-progress: false
       queue: max
     permissions:
