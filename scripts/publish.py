@@ -130,10 +130,10 @@ def write_report(report,output_dir):
     if publication:url(publication['maven_url'])
     title='CMP-'+now.strftime('%Y-%m-%d')+'-发布信息'
     lines=['# '+title,'',f'- Compose 版本：`{cell(release)}`',f'- 发布状态：{status}',f'- 报告生成时间：{now.strftime("%Y-%m-%d %H:%M:%S")}（北京时间）']
-    for name,key in [('Trace','trace'),('LTPO','ltpo')]:
+    for name,key in [('Debug 日志','debug_enabled'),('Trace','trace'),('LTPO','ltpo')]:
         lines.append('- '+name+'：'+('开启' if report['build_options'][key] else '关闭'))
     if status=='已发布到 Maven Local':
-        lines += ['- Maven 仓库：Runner 本地 `work/maven`（任务结束后释放）']
+        lines += ['- Maven 仓库：Runner 本地 Maven（任务结束后释放）']
     if publication:
         lines += [f'- Maven 仓库：{publication["maven_url"]}',f'- 发布流程记录时间：{cell(publication["completed_at"])}',f'- 阶段结果：Core `{publication["components"]["core"]}` / CMP `{publication["components"]["cmp"]}`']
     if report['run_url']: lines.append(f'- 构建记录：[查看 GitHub Actions]({report["run_url"]})')

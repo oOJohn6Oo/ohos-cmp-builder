@@ -52,7 +52,9 @@ def scope_end(code,start):
 
 def named_scope(code,name,start=0,end=None):
     end=len(code) if end is None else end
-    matches=list(re.finditer(r'\b'+re.escape(name)+r'\s*\{',code[start:end]))
+    parent=parent_scope(code,start)
+    matches=[match for match in re.finditer(r'\b'+re.escape(name)+r'\s*\{',code[start:end])
+             if parent_scope(code,start+match.start())==parent]
     if len(matches)!=1: raise ValueError('Expected exactly one '+name+' block')
     opening=start+matches[0].end()-1
     closing=scope_end(code,opening)
@@ -73,8 +75,9 @@ def parent_scope(code,position):
 def configure(text,kind):
     comments,code=masks(text)
     start,end=0,len(text)
-    if kind in ('cmp','plugins'):
-        start,end=named_scope(code,'pluginManagement' if kind=='plugins' else 'dependencyResolutionManagement')
+    scopes={'cmp':'dependencyResolutionManagement','plugins':'pluginManagement','cmp-plugin-dependencies':'subprojects'}
+    if kind in scopes:
+        start,end=named_scope(code,scopes[kind])
         start,end=named_scope(code,'repositories',start,end)
     region=comments[start:end]
     # The accepted forms deliberately exclude content filters, credentials and
@@ -110,6 +113,7 @@ def apply(core,cmp,dry_run=False):
         (Path(core)/'settings.gradle',('plugins',)),
         (Path(cmp)/'components/settings.gradle.kts',('plugins','cmp')),
         (Path(cmp)/'gradle-plugins/settings.gradle.kts',('plugins',)),
+        (Path(cmp)/'gradle-plugins/build.gradle.kts',('cmp-plugin-dependencies',)),
     ]
     changes=[]
     for path,kinds in files:
@@ -320,23 +324,18 @@ def compile_sources(workspace, request, debug, credentials=None):
     if not debug and not credentials: raise ValueError('Publication credentials are required')
     for key in ('JAVA_HOME','ANDROID_HOME','OHOS_SDK_HOME'):
         if not os.environ.get(key): raise ValueError('Missing '+key)
-    home=workspace/'gradle-home';home.mkdir(exist_ok=True)
     child_env=os.environ.copy()
     for key in ('MAVEN_USERNAME','MAVEN_PASSWORD','MAVEN_CREDENTIAL_PRIVATE_KEY','CREDENTIAL_ENVELOPE','REQUEST_JSON','COMPOSE_CUSTOM_VERSION','COMPOSE_GRADLE_PLUGIN_VERSION','COMPOSE_REPO_USERNAME','COMPOSE_REPO_KEY','COMPOSE_REPO_URL'):
         child_env.pop(key,None)
-    child_env['GRADLE_USER_HOME']=str(home)
     core_task=':mpp:publishComposeJbToMavenLocal' if debug else ':mpp:publishComposeJb'
     core_command=['./gradlew',core_task,'-Pcompose.platforms=android,ohos,uikit','-Pjetbrains.publication.version.COMPOSE='+release,'--no-configuration-cache','--console=plain']
-    for option,property_name in [('trace','androidx.ohosTraceEnabled'),('ltpo','androidx.ohosLtpoDiagnostics')]:
+    for option,property_name in [('debug_enabled','androidx.kLogLevel'),('trace','androidx.ohosTraceEnabled'),('ltpo','androidx.ohosLtpoDiagnostics')]:
         enabled=build_options[option]
         if type(enabled) is not bool: raise ValueError('Build options must be booleans')
-        core_command.append('-P'+property_name+'='+str(enabled).lower())
+        value=('DEBUG' if enabled else 'INFO') if option=='debug_enabled' else str(enabled).lower()
+        core_command.append('-P'+property_name+'='+value)
     record=None
-    if debug:
-        maven_dir=workspace/'maven';maven_dir.mkdir(exist_ok=False)
-        child_env['JAVA_TOOL_OPTIONS']='-Dmaven.repo.local='+str(maven_dir)
-        log('Maven Local: '+str(maven_dir))
-    else:
+    if not debug:
         username,password=credentials
         protect_credentials(username,password)
         destination=request['publish_url']
@@ -352,7 +351,7 @@ def compile_sources(workspace, request, debug, credentials=None):
         try:
             with stage(owner+' '+('local' if debug else 'remote')+' publication'):
                 log('Task: '+core_task if owner=='core' else 'CMP: build-ohos.sh '+(' --local' if debug else ' --remote')+' --skip-html')
-                log('Trace='+str(build_options['trace']).lower()+'; LTPO='+str(build_options['ltpo']).lower())
+                log('Debug logs='+str(build_options['debug_enabled']).lower()+'; Trace='+str(build_options['trace']).lower()+'; LTPO='+str(build_options['ltpo']).lower())
                 subprocess.run(command,cwd=workspace/owner,env=child_env,check=True)
             if record:record['components'][owner]='succeeded'
         finally:

@@ -138,7 +138,7 @@ function setPhase(next,mode=activeMode){
 }
 function currentRequest(mode){
  const dependencies=Object.fromEntries(Object.entries(state.dependencies).map(([key,item])=>[key,{mode:item.mode,version:item.readVersion()}]));
- return buildRequest(state.branches,dependencies,$('suffix').value,mode==='publish'?$('publish-url').value:undefined,{mode,trace:$('build-trace').checked,ltpo:$('build-ltpo').checked});
+ return buildRequest(state.branches,dependencies,$('suffix').value,mode==='publish'?$('publish-url').value:undefined,{mode,debug_enabled:$('build-debug').checked,trace:$('build-trace').checked,ltpo:$('build-ltpo').checked});
 }
 function showTask(status,message,url){
  const link=element('a','查看构建任务');link.href=url;link.target='_blank';link.rel='noopener noreferrer';

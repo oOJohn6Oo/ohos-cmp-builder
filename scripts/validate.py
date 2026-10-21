@@ -105,7 +105,7 @@ def validate(data,debug=False):
     nonce=data.get('submission_nonce')
     if 'submission_nonce' in data and (not isinstance(nonce,str) or not re.fullmatch(r'[0-9a-f]{32}',nonce)):raise ValueError('Invalid submission nonce')
     options=data.get('build_options',{})
-    if not isinstance(options,dict) or set(options)-{'trace','ltpo'} or any(type(value) is not bool for value in options.values()):raise ValueError('Build options must be boolean trace and ltpo switches')
+    if not isinstance(options,dict) or set(options)-{'debug_enabled','trace','ltpo'} or any(type(value) is not bool for value in options.values()):raise ValueError('Build options must be boolean debug_enabled, trace and ltpo switches')
     suffix=data.get('suffix','')
     if not isinstance(suffix,str):raise ValueError('Invalid suffix')
     suffix=suffix.strip().lstrip('-')
@@ -127,7 +127,7 @@ def validate(data,debug=False):
         if item['mode']=='custom':normalized[key]['version']=version(item.get('version'))
         elif item.get('version') is not None:raise ValueError('Only custom mode accepts a version')
     request=dict(schema_version=1,sources=sources,suffix=suffix,compose_version='1.12.0-'+suffix,dependencies=normalized,
-                 build_options={key:options.get(key,False) for key in ('trace','ltpo')})
+                 build_options={key:options.get(key,False) for key in ('debug_enabled','trace','ltpo')})
     if not debug:request['publish_url']=publication_url(data.get('publish_url'))
     return request
 

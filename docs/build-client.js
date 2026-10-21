@@ -11,9 +11,9 @@ function unconfirmed(){const error=new Error('提交结果未确认，请重试�
 export const normalizeSuffix=value=>value.trim().replace(/^-+/,'');
 export const validSuffix=value=>/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value)&&/[0-9]$/.test(value)&&!/^1\.(12\.0|9\.2)/.test(value);
 
-export function buildRequest(branches,dependencies,suffix,url,{mode='publish',trace=false,ltpo=false}={}){
+export function buildRequest(branches,dependencies,suffix,url,{mode='publish',debug_enabled=false,trace=false,ltpo=false}={}){
  if(!['debug','publish'].includes(mode))throw new Error('构建模式无效');
- if(typeof trace!=='boolean'||typeof ltpo!=='boolean')throw new Error('构建开关无效');
+ if(typeof debug_enabled!=='boolean'||typeof trace!=='boolean'||typeof ltpo!=='boolean')throw new Error('构建开关无效');
  const sources={};
  for(const [key,repository] of Object.entries({core:'CPF-KMP-CMP/compose-multiplatform-core',cmp:'CPF-KMP-CMP/compose-multiplatform'})){
   const b=branches[key];
@@ -35,7 +35,7 @@ export function buildRequest(branches,dependencies,suffix,url,{mode='publish',tr
    choices[key].version=v;
   }
  }
- const request={schema_version:1,sources,suffix,dependencies:choices,build_options:{trace,ltpo}};
+ const request={schema_version:1,sources,suffix,dependencies:choices,build_options:{debug_enabled,trace,ltpo}};
  if(mode==='publish')request.publish_url=publicationURL(url);
  return request;
 }
