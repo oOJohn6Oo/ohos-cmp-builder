@@ -16,7 +16,7 @@ const deps = [
 const state = {branches:{}, dependencies:{}};
 function element(tag, text, cls) {const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(cls)el.className=cls;return el;}
 const dependencyRepositories=['inner','public'];
-const platformLabels={android:'Android',ohos:'OHOS',uikit:'UIKit'};
+const platformLabels={android:'Android',ohos:'OHOS',uikit:'UIKit',macos:'macOS'};
 function selectedPlatforms(){return [...document.querySelectorAll('input[name="platform"]:checked')].map(input=>input.value);}
 function suffix(){return normalizeSuffix($('suffix').value);}
 function updateSummary(){

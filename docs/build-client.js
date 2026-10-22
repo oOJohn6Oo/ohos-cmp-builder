@@ -14,7 +14,7 @@ export const validSuffix=value=>/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value)&
 export function buildRequest(branches,dependencies,suffix,url,{mode='publish',platforms=['ohos'],debug_enabled=false,trace=false,ltpo=false}={}){
  if(!['debug','publish'].includes(mode))throw new Error('构建模式无效');
  if(!Array.isArray(platforms)||!platforms.length)throw new Error('请至少选择一个构建平台');
- const selectedPlatforms=['android','ohos','uikit'].filter(value=>platforms.includes(value));
+ const selectedPlatforms=['android','ohos','uikit','macos'].filter(value=>platforms.includes(value));
  if(selectedPlatforms.length!==platforms.length)throw new Error('构建平台无效');
  if(typeof debug_enabled!=='boolean'||typeof trace!=='boolean'||typeof ltpo!=='boolean')throw new Error('构建开关无效');
  const sources={};

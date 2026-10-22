@@ -134,7 +134,7 @@ def write_report(report,output_dir):
     if publication:url(publication['maven_url'])
     title='CMP-'+release+'-发布信息'
     lines=['# '+title,'',f'- Compose 版本：`{cell(release)}`',f'- 发布状态：{status}',f'- 报告生成时间：{now.strftime("%Y-%m-%d %H:%M:%S")}（北京时间）']
-    platform_names={'android':'Android','ohos':'OHOS','uikit':'UIKit'}
+    platform_names={'android':'Android','ohos':'OHOS','uikit':'UIKit','macos':'macOS'}
     lines.append('- 构建平台：'+'、'.join(platform_names[name] for name in report['platforms']))
     if 'ohos' in report['platforms']:
         for name,key in [('Debug 日志','debug_enabled'),('Trace','trace'),('LTPO','ltpo')]:

@@ -15,7 +15,7 @@ import urllib.request
 
 REPOS={'core':'CPF-KMP-CMP/compose-multiplatform-core','cmp':'CPF-KMP-CMP/compose-multiplatform'}
 DEPENDENCIES=('kotlin','skiko','coroutines_core','coroutines_cmp','serialization','atomicfu','datetime','okio')
-PLATFORMS=('android','ohos','uikit')
+PLATFORMS=('android','ohos','uikit','macos')
 SUBMIT_URL='https://vjmzpjoqgjuvlaubmjgm.supabase.co/functions/v1/submit-build'
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -105,9 +105,9 @@ def validate(data,debug=False):
     if type(data.get('schema_version')) is not int or data.get('schema_version')!=1:raise ValueError('Unsupported schema version')
     nonce=data.get('submission_nonce')
     if 'submission_nonce' in data and (not isinstance(nonce,str) or not re.fullmatch(r'[0-9a-f]{32}',nonce)):raise ValueError('Invalid submission nonce')
-    platforms=data.get('platforms',list(PLATFORMS))
+    platforms=data.get('platforms',['android','ohos','uikit'])
     if not isinstance(platforms,list) or not platforms or any(not isinstance(value,str) or value not in PLATFORMS for value in platforms) or len(set(platforms))!=len(platforms):
-        raise ValueError('Select one or more unique platforms: android, ohos, uikit')
+        raise ValueError('Select one or more unique platforms: '+', '.join(PLATFORMS))
     platforms=[value for value in PLATFORMS if value in platforms]
     options=data.get('build_options',{})
     if not isinstance(options,dict) or set(options)-{'debug_enabled','trace','ltpo'} or any(type(value) is not bool for value in options.values()):raise ValueError('Build options must be boolean debug_enabled, trace and ltpo switches')
