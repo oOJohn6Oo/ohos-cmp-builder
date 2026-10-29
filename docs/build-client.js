@@ -38,8 +38,7 @@ export function buildRequest(branches,dependencies,suffix,url,{mode='publish',pl
    choices[key].version=v;
   }
  }
- const ohos=selectedPlatforms.includes('ohos');
- const request={schema_version:1,sources,suffix,platforms:selectedPlatforms,dependencies:choices,build_options:{debug_enabled:ohos&&debug_enabled,trace:ohos&&trace,ltpo:ohos&&ltpo}};
+ const request={schema_version:1,sources,suffix,platforms:selectedPlatforms,dependencies:choices,build_options:{debug_enabled,trace,ltpo}};
  if(mode==='publish')request.publish_url=publicationURL(url);
  return request;
 }

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -16,7 +17,7 @@ from types import SimpleNamespace
 import urllib.request
 from urllib.parse import urlsplit
 from validate import REPOS, http, log, version, write_json, stage, fail, claim_task, validate, decrypt_credentials, protect_credentials
-from publish import properties, versions, generate
+from publish import versions, generate
 from bump_versions import align_versions
 from latest_dependencies import DEPENDENCIES, PUBLIC_MAVEN, latest_version
 
@@ -238,17 +239,18 @@ def prepare(request,workspace):
     with stage('Gradle distribution configuration'): configure_gradle(core,cmp)
     with stage('publication platforms'): configure_platforms(cmp,request['platforms'])
     with stage('Maven repository configuration'): apply(core,cmp)
-    cv=versions(core/'gradle/libs.versions.toml');mv=versions(cmp/'components/gradle/libs.versions.toml')
-    defaults={'kotlin':cv['kotlin'],'skiko':cv['skikoOhos'],'coroutines_core':cv['kotlinCoroutines'],'coroutines_cmp':mv['kotlinx-coroutines'],'serialization':cv['kotlinSerialization'],'atomicfu':cv['atomicFu'],'datetime':cv['datetime'],'okio':cv['okio']}
-    if request['dependencies']['kotlin']['mode']=='default':
-        values=[defaults['kotlin'],properties(cmp/'components/gradle.properties')['kotlin.version'],versions(cmp/'gradle-plugins/gradle/libs.versions.toml')['kotlin']]
-        if len(set(values))!=1:raise ValueError('Kotlin branch defaults differ; select an explicit version')
-    if request['dependencies']['skiko']['mode']=='default' and defaults['skiko']!=mv['ohosSkiko']:raise ValueError('Skiko branch defaults differ')
+    defaults={}
+    if any(choice['mode']=='latest' for choice in request['dependencies'].values()):
+        cv=versions(core/'gradle/libs.versions.toml');mv=versions(cmp/'components/gradle/libs.versions.toml')
+        defaults={'kotlin':cv['kotlin'],'skiko':cv['skikoOhos'],'coroutines_core':cv['kotlinCoroutines'],'coroutines_cmp':mv['kotlinx-coroutines'],'serialization':cv['kotlinSerialization'],'atomicfu':cv['atomicFu'],'datetime':cv['datetime'],'okio':cv['okio']}
     resolved={}
     for key,info in DEPENDENCIES.items():
         choice=request['dependencies'][key];mode=choice['mode']
-        if mode!='latest':
-            resolved[key]=version(defaults[key] if mode=='default' else choice['version'])
+        if mode=='default':
+            log(key+': using branch default')
+            continue
+        if mode=='custom':
+            resolved[key]=version(choice['version'])
             log(key+' = '+resolved[key]+'; mode='+mode)
             continue
         log('Resolving '+key+'; mode='+mode+'; branch version='+defaults[key])
@@ -343,6 +345,20 @@ def build_har(core, output, release):
     log('HAR verified: '+target.name+'; bytes='+str(target.stat().st_size)+'; version='+release)
 
 
+def package_maven_local(repository, output, release):
+    source=repository/'org'
+    if source.is_symlink() or not source.is_dir():raise ValueError('Maven Local org directory is missing')
+    entries=list(source.rglob('*'))
+    if any(path.is_symlink() for path in entries):raise ValueError('Maven Local artifacts must not contain symlinks')
+    files=[path for path in entries if path.is_file()]
+    if not files:raise ValueError('Maven Local org directory is empty')
+    output.mkdir(parents=True,exist_ok=True)
+    target=output/('CMP-'+release+'-maven-local.zip')
+    if target.exists():raise ValueError('Maven Local archive already exists')
+    shutil.make_archive(str(target.with_suffix('')),'zip',root_dir=repository,base_dir='org')
+    log('Maven Local archive: '+target.name+'; files='+str(len(files))+'; bytes='+str(target.stat().st_size))
+
+
 def compile_sources(workspace, request, debug, credentials=None):
     release=request['compose_version'];build_options=request['build_options']
     if not debug and not credentials: raise ValueError('Publication credentials are required')
@@ -358,6 +374,10 @@ def compile_sources(workspace, request, debug, credentials=None):
         if type(enabled) is not bool: raise ValueError('Build options must be booleans')
         value=('DEBUG' if enabled else 'INFO') if option=='debug_enabled' else str(enabled).lower()
         core_command.append('-P'+property_name+'='+value)
+    if debug:
+        local_repository=workspace/'maven'
+        local_repository.mkdir()
+        child_env['GRADLE_OPTS']=(child_env.get('GRADLE_OPTS','')+' '+shlex.quote('-Dmaven.repo.local='+str(local_repository))).strip()
     record=None
     if not debug:
         username,password=credentials
@@ -376,8 +396,7 @@ def compile_sources(workspace, request, debug, credentials=None):
             with stage(owner+' '+('local' if debug else 'remote')+' publication'):
                 log('Task: '+core_task if owner=='core' else 'CMP: build-ohos.sh '+(' --local' if debug else ' --remote')+' --skip-html')
                 log('Platforms: '+','.join(request['platforms']))
-                if 'ohos' in request['platforms']:
-                    log('Debug logs='+str(build_options['debug_enabled']).lower()+'; Trace='+str(build_options['trace']).lower()+'; LTPO='+str(build_options['ltpo']).lower())
+                if owner=='core':log('Debug logs='+str(build_options['debug_enabled']).lower()+'; Trace='+str(build_options['trace']).lower()+'; LTPO='+str(build_options['ltpo']).lower())
                 subprocess.run(command,cwd=workspace/owner,env=child_env,check=True)
             if record:record['components'][owner]='succeeded'
         finally:
@@ -386,7 +405,9 @@ def compile_sources(workspace, request, debug, credentials=None):
                 write_json(workspace/'publication.json',record)
     child_env.clear()
     core_command.clear()
-    if 'ohos' in request['platforms']:
+    if debug:
+        with stage('Maven Local packaging'): package_maven_local(local_repository,workspace/'artifacts',release)
+    elif 'ohos' in request['platforms']:
         with stage('HAR compilation'): build_har(workspace/'core',workspace/'har',release)
         with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('har_built=true\n')
 
@@ -399,9 +420,9 @@ def main():
     args=parser.parse_args();workspace=Path(args.workspace).resolve();workspace.mkdir(parents=True,exist_ok=True)
     if args.report_only:
         request=json.loads((workspace/'request.json').read_text())
-        has_har='ohos' in request['platforms']
+        has_har=not args.debug and 'ohos' in request['platforms']
         with stage('release information'):
-            outputs=generate(SimpleNamespace(core=str(workspace/'core'),cmp=str(workspace/'cmp'),har=str(workspace/'har'/('compose-'+request['compose_version']+'.har')) if has_har else None,output_dir=str(workspace/'release-info'),har_url=os.environ['HAR_URL'] if has_har else None,run_url=os.environ.get('RUN_URL'),core_branch=request['sources']['core']['branch'],cmp_branch=request['sources']['cmp']['branch'],publication_record=None if args.debug else str(workspace/'publication.json'),local_only=args.debug,build_options=request['build_options'],platforms=request['platforms']))
+            outputs=generate(SimpleNamespace(core=str(workspace/'core'),cmp=str(workspace/'cmp'),har=str(workspace/'har'/('compose-'+request['compose_version']+'.har')) if has_har else None,output_dir=str(workspace/'release-info'),har_url=os.environ['HAR_URL'] if has_har else None,local_maven_url=os.environ.get('LOCAL_MAVEN_URL'),run_url=os.environ.get('RUN_URL'),core_branch=request['sources']['core']['branch'],cmp_branch=request['sources']['cmp']['branch'],publication_record=None if args.debug else str(workspace/'publication.json'),local_only=args.debug,build_options=request['build_options'],platforms=request['platforms']))
         for output in outputs: log('Release information saved: '+output.name)
         return
     private=os.environ.pop('MAVEN_CREDENTIAL_PRIVATE_KEY','')
@@ -419,13 +440,13 @@ def main():
     del task,private
     write_json(workspace/'request.json',request)
     with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('version='+request['compose_version']+'\n')
-    log('Version='+request['compose_version']+'; platforms='+','.join(request['platforms'])+'; mode='+('debug (Maven Local)' if args.debug else 'publish'))
+    log('Version='+request['compose_version']+'; platforms='+','.join(request['platforms'])+'; mode='+('local' if args.debug else 'remote'))
     with stage('source preparation'): prepare(request,workspace)
     with stage('HarmonyOS environment'): install_harmony()
     with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('harmony_ready=true\n')
     compile_sources(workspace,request,args.debug,credentials)
     with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('built=true\n')
-    if args.debug: log('Debug complete: Core and CMP published to Maven Local'+('; HAR built' if 'ohos' in request['platforms'] else '')+'; remote publication skipped')
+    if args.debug: log('Local publication complete: Core and CMP Maven artifacts packaged')
 
 if __name__=='__main__':
     try: main()

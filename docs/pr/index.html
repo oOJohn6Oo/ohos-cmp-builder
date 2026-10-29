@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#141414">
+  <title>CMP / REVIEW</title>
+  <link rel="icon" type="image/png" href="../favicon.png">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="CMP Review 首页"><strong>CMP</strong><span>/ REVIEW</span></a>
+    <div class="toolbar">
+      <span class="period">近 30 天</span>
+      <button class="refresh" id="refresh" type="button" aria-label="刷新近 30 天的待审查请求" hidden>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.5-1L20 9M4 15l2.4 3A7 7 0 0 0 17.9 17"/></svg>
+        <span>刷新</span>
+      </button>
+    </div>
+  </header>
+  <main id="main">
+    <div class="error-notice" id="error-notice" role="status" hidden>
+      <div><strong>结果不完整</strong><p id="error-message"></p></div>
+      <button id="retry" class="quiet-button" type="button" hidden>重新刷新</button>
+    </div>
+    <section class="chooser" id="chooser" aria-labelledby="chooser-title">
+      <h1 id="chooser-title" tabindex="-1">谁来审查？</h1>
+      <ul class="profiles" id="profiles" aria-label="审查人"></ul>
+      <div class="empty-state" id="home-empty">
+        <span class="spinner large" id="home-spinner" aria-hidden="true"></span>
+        <p id="home-message">Loading…</p>
+      </div>
+    </section>
+    <section class="detail" id="detail" aria-labelledby="detail-title" hidden>
+      <button class="back-button" id="back" type="button">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg>
+        所有审查人
+      </button>
+      <div class="detail-heading">
+        <div id="detail-avatar" class="detail-avatar" aria-hidden="true"></div>
+        <div class="detail-heading-text">
+          <h1 id="detail-title" tabindex="-1">待审查请求</h1>
+          <p class="detail-count" id="detail-count"><span id="detail-number"></span><span class="spinner" id="detail-spinner" aria-hidden="true"></span></p>
+        </div>
+      </div>
+      <ul class="pr-list" id="pr-list" aria-label="待审查请求"></ul>
+      <div class="empty-state detail-empty" id="detail-empty" hidden><p id="detail-message"></p></div>
+    </section>
+    <p class="scan-progress" id="scan-progress" aria-hidden="true"></p>
+    <p class="sr-only" id="announcer" role="status" aria-live="polite" aria-atomic="true">正在扫描最近 30 天的待审查请求。</p>
+  </main>
+  <noscript><p class="noscript">请启用 JavaScript 以加载待审查请求。</p></noscript>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

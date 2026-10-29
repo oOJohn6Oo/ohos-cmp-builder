@@ -132,7 +132,7 @@ def validate(data,debug=False):
         if item['mode']=='custom':normalized[key]['version']=version(item.get('version'))
         elif item.get('version') is not None:raise ValueError('Only custom mode accepts a version')
     request=dict(schema_version=1,sources=sources,suffix=suffix,compose_version='1.12.0-'+suffix,dependencies=normalized,platforms=platforms,
-                 build_options={key:'ohos' in platforms and options.get(key,False) for key in ('debug_enabled','trace','ltpo')})
+                 build_options={key:options.get(key,False) for key in ('debug_enabled','trace','ltpo')})
     if not debug:request['publish_url']=publication_url(data.get('publish_url'))
     return request
 

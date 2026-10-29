@@ -1,6 +1,6 @@
 # OHOS CMP Builder
 
-从 GitCode 拉取 CMP-Core 和 CMP 源码，构建并发布 CMP 1.12，同时生成 HAR 和发布信息。
+从 GitCode 拉取 CMP-Core 和 CMP 源码，构建并发布 CMP 1.12，支持远端发布和本地发布。
 
 构建页面：https://cmp.jon6.org 。前端位于 `docs/`，修改前端后由 `pages.yml` 部署。
 
@@ -13,7 +13,7 @@
 ## 脚本
 
 - `scripts/validate.py`：领取任务、输入与凭据校验、回写状态。
-- `scripts/build.py`：源码准备、SDK、版本配置；使用 Core/CMP 原生 Gradle 发布流程并构建 HAR，`--debug` 仅发布到 Maven Local。
+- `scripts/build.py`：源码准备、SDK、版本配置和原生 Gradle 发布；远端发布生成 HAR，本地发布打包 Maven 产物。
 - `scripts/latest_dependencies.py`：通过 Nexus API 查询 maven-public，按固定前缀、版本倒序筛选正式版；逐个检查 OHOS ARM64 坐标，缺失则尝试下一版本。
 - `scripts/bump_versions.py`：统一依赖版本、发布版本及 HAR 包版本，可单独运行，支持 `--dry-run`。
 - `scripts/publish.py`：生成发布信息 Markdown 和 HAR 下载链接。
@@ -22,7 +22,7 @@
 
 网页调用 `submit-build`，函数创建任务并追加 `history.md`；该 commit 触发 `build.yml`，每次提交只有一条运行记录。Actions 使用 GitHub 签发的短期身份凭证领取任务，完成后回写状态。
 
-工作流根据提交模式执行正式构建或 **Debug**。Debug 完整编译 Core、CMP、HAR，仅发布到 Runner 的 Maven Local，不需要发布仓库地址或账号密码；最终同样保留 Markdown 和 HAR。
+远端发布需要仓库 URL、账号和密码；本地发布将 Core、CMP 发布到本次任务独立的 Maven Local 目录，不需要远端仓库信息，并将整个 `org/` 目录打包下载。两种方式都在 Actions Summary 展示发布信息。
 
 后缀以数字结尾，例如 `dev.01`，对应版本 `1.12.0-dev.01`。
 
@@ -32,5 +32,5 @@
 
 构建完成后，在 Actions 运行页面下载：
 
-- `compose-<version>-<run-id>`：HAR，保留 30 天。
-- `release-info-<version>-<run-id>`：发布信息 Markdown，包含 HAR 下载链接，保留 30 天。
+- 远端发布：`compose-<version>.har`（选择 OHOS 时）和 `CMP-<version>-发布信息.md`。
+- 本地发布：`CMP-<version>-maven-local.zip`，解压后为完整的 `org/` Maven 目录。

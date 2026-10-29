@@ -63,16 +63,26 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 30
+      - id: local-maven
+        name: Save Maven Local artifacts
+        if: steps.compile.outputs.built == 'true' && env.DEBUG_RUN == 'true'
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          path: work/artifacts/CMP-${{ steps.compile.outputs.version }}-maven-local.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
       - name: Generate release information
         if: steps.compile.outputs.built == 'true'
         env:
           HAR_URL: ${{ steps.har.outputs.artifact-url }}
+          LOCAL_MAVEN_URL: ${{ steps.local-maven.outputs.artifact-url }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           python -u scripts/build.py --workspace work --report-only
           cat work/release-info/*.md >> "$GITHUB_STEP_SUMMARY"
       - name: Save release information
-        if: steps.compile.outputs.built == 'true'
+        if: steps.compile.outputs.built == 'true' && env.DEBUG_RUN != 'true'
         uses: actions/upload-artifact@v7.0.2
         with:
           path: work/release-info/CMP-${{ steps.compile.outputs.version }}-发布信息.md

@@ -21,7 +21,6 @@ function selectedPlatforms(){return [...document.querySelectorAll('input[name="p
 function suffix(){return normalizeSuffix($('suffix').value);}
 function updateSummary(){
  const platforms=selectedPlatforms();
- for(const id of ['build-debug','build-trace','build-ltpo'])$(id).disabled=!platforms.includes('ohos');
  const items=[['CMP Core',state.branches.core?.name||'未选择'],['CMP',state.branches.cmp?.name||'未选择'],['构建平台',platforms.map(value=>platformLabels[value]).join(' / ')||'未选择'],['依赖覆盖',`${Object.values(state.dependencies).filter(x=>x.mode!=='default').length} 项`],['发布版本',suffix()?`1.12.0-${suffix()}`:'—'],['发布目标',$('publish-url').value.trim()||'未填写']];
  $('summary').replaceChildren(...items.flatMap(([a,b])=>[element('dt',a),element('dd',b)]));
  $('full-version').textContent=suffix()?`1.12.0-${suffix()}`:'1.12.0-…';
@@ -71,13 +70,13 @@ for(const [id,label,group,artifact] of deps){
  const row=element('div',undefined,'dependency');
  const info=element('div');info.append(element('strong',label));
  const mode=element('select');mode.setAttribute('aria-label',`${label} 版本模式`);for(const [v,t] of [['default','分支默认'],['latest','最新 release'],['custom','自定义']])mode.append(new Option(t,v));
- const valueBox=element('div');const version=element('input');version.placeholder='分支版本待解析';version.disabled=true;version.setAttribute('aria-label',`${label} 版本`);
+ const valueBox=element('div');const version=element('input');version.disabled=true;version.setAttribute('aria-label',`${label} 版本`);
  const check=element('button','检查版本','check');check.type='button';check.hidden=true;
  const status=element('div','','status');status.setAttribute('role','status');valueBox.append(version,check,status);
  const item=state.dependencies[id]={mode:'default'};let generation=0;
  const invalidate=()=>{generation++;check.disabled=false;item.error=false;item.loading=false;status.className='status';status.textContent='';updateSummary();};
  item.readVersion=()=>version.value.trim();
- mode.addEventListener('change',()=>{item.mode=mode.value;version.value='';version.disabled=mode.value!=='custom';version.placeholder=mode.value==='default'?'分支版本待解析':mode.value==='latest'?'构建时解析':'输入版本号';check.hidden=mode.value!=='custom';invalidate();});
+ mode.addEventListener('change',()=>{item.mode=mode.value;version.value='';version.disabled=mode.value!=='custom';version.placeholder=mode.value==='default'?'':mode.value==='latest'?'构建时解析':'输入版本号';check.hidden=mode.value!=='custom';invalidate();});
  version.addEventListener('input',invalidate);
  const queryVersion=async()=>{
   if(mode.value!=='custom')return;
@@ -108,11 +107,14 @@ function setAllModes(mode){
  for(const select of document.querySelectorAll('.dependency select')){select.value=mode;select.dispatchEvent(new Event('change'));}
 }
 $('toggle-dependencies').addEventListener('click',()=>{
- const list=$('dependencies');
- list.hidden=!list.hidden;
  const button=$('toggle-dependencies');
- button.setAttribute('aria-expanded',String(!list.hidden));
- const label=list.hidden?'展开依赖':'收起依赖';
+ const panel=$('dependency-panel'),expanded=button.getAttribute('aria-expanded')!=='true';
+ if(!expanded&&panel.contains(document.activeElement))button.focus();
+ panel.classList.toggle('is-open',expanded);
+ panel.inert=!expanded;
+ panel.setAttribute('aria-hidden',String(!expanded));
+ button.setAttribute('aria-expanded',String(expanded));
+ const label=expanded?'收起依赖':'展开依赖';
  button.setAttribute('aria-label',label);
  button.title=label;
 });
@@ -130,7 +132,7 @@ function setPhase(next,mode=activeMode){
  const locked=phase!=='idle';
  $('config-form').inert=locked;
  $('config-form').setAttribute('aria-disabled',String(locked));
- for(const [buttonMode,label] of [['debug','Debug · Maven Local'],['publish','开始发布']]){
+ for(const [buttonMode,label] of [['debug','本地发布'],['publish','远端发布']]){
   const button=$(`${buttonMode}-run`);
   const active=buttonMode===mode;
   const loading=active&&['submitting','pending','running'].includes(phase);

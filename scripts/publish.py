@@ -93,7 +93,7 @@ def generate(args):
     if len({cv['kotlin'],cv['composeCompilerPlugin'],cp['kotlin.version'],pv['kotlin']})!=1: raise ValueError('Kotlin / Compose Compiler versions differ')
     if cv['skikoOhos'] != mv['ohosSkiko']: raise ValueError('Core/CMP OHOS Skiko versions differ')
     artifact=None
-    if 'ohos' in args.platforms:
+    if not args.local_only and 'ohos' in args.platforms:
         if not args.har: raise ValueError('OHOS builds require a HAR artifact')
         artifact=inspect_har(Path(args.har))
         if artifact['package_version']!=release: raise ValueError('HAR package version does not match source configuration')
@@ -122,7 +122,7 @@ def generate(args):
     now=datetime.now(ZoneInfo('Asia/Shanghai'))
     sources={'CMP-Core':baseline(core,args.core_branch),'CMP':baseline(cmp,args.cmp_branch)}
     report=dict(schema_version=1,compose_version=release,status=status,generated_at=now.isoformat(),publication=publication,
-                dependencies=dict(deps),products=products,har=artifact,sources=sources,run_url=url(args.run_url),build_options=args.build_options,platforms=args.platforms)
+                dependencies=dict(deps),products=products,har=artifact,sources=sources,run_url=url(args.run_url),local_maven_url=url(args.local_maven_url) if args.local_only else None,build_options=args.build_options,platforms=args.platforms)
     return write_report(report,args.output_dir)
 
 def write_report(report,output_dir):
@@ -132,15 +132,16 @@ def write_report(report,output_dir):
     url(report.get('run_url'))
     if artifact:url(artifact.get('download_url'))
     if publication:url(publication['maven_url'])
+    local_maven_url=url(report.get('local_maven_url'))
     title='CMP-'+release+'-发布信息'
     lines=['# '+title,'',f'- Compose 版本：`{cell(release)}`',f'- 发布状态：{status}',f'- 报告生成时间：{now.strftime("%Y-%m-%d %H:%M:%S")}（北京时间）']
     platform_names={'android':'Android','ohos':'OHOS','uikit':'UIKit','macos':'macOS'}
     lines.append('- 构建平台：'+'、'.join(platform_names[name] for name in report['platforms']))
-    if 'ohos' in report['platforms']:
-        for name,key in [('Debug 日志','debug_enabled'),('Trace','trace'),('LTPO','ltpo')]:
-            lines.append('- '+name+'：'+('开启' if report['build_options'][key] else '关闭'))
+    for name,key in [('Debug 日志','debug_enabled'),('Trace','trace'),('LTPO','ltpo')]:
+        lines.append('- '+name+'：'+('开启' if report['build_options'][key] else '关闭'))
     if status=='已发布到 Maven Local':
         lines += ['- Maven 仓库：Runner 本地 Maven（任务结束后释放）']
+        if local_maven_url:lines += [f'- 本地产物：[CMP-{release}-maven-local.zip]({local_maven_url})（包含完整的 `org/` 目录）']
     if publication:
         lines += [f'- Maven 仓库：{publication["maven_url"]}',f'- 发布流程记录时间：{cell(publication["completed_at"])}',f'- 阶段结果：Core `{publication["components"]["core"]}` / CMP `{publication["components"]["cmp"]}`']
     if report['run_url']: lines.append(f'- 构建记录：[查看 GitHub Actions]({report["run_url"]})')

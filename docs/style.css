@@ -28,7 +28,8 @@ input::placeholder{color:var(--muted);opacity:1}input:disabled{color:var(--muted
 #toggle-dependencies svg{flex-shrink:0;color:var(--muted);transition:transform 200ms ease}
 #toggle-dependencies[aria-expanded=true] svg{transform:rotate(90deg)}
 .toolbar{display:flex;flex-wrap:wrap;gap:12px}.toolbar button{min-height:36px;padding:7px 12px;font-size:12px}.toolbar button[aria-pressed=true]{border-color:var(--accent);color:var(--accent);background:var(--hover)}
-#dependencies{margin-top:16px}.dependency{display:grid;grid-template-columns:minmax(105px,1fr) minmax(110px,1fr) minmax(130px,1.35fr);align-items:start;gap:10px;padding:15px 0;border-top:1px solid var(--line)}
+.dependency-panel{display:grid;grid-template-rows:0fr;opacity:0;margin-top:0;transition:grid-template-rows 220ms ease,opacity 180ms ease,margin-top 220ms ease}.dependency-panel.is-open{grid-template-rows:1fr;opacity:1;margin-top:16px}
+#dependencies{min-height:0;overflow:hidden}.dependency{display:grid;grid-template-columns:minmax(105px,1fr) minmax(110px,1fr) minmax(130px,1.35fr);align-items:start;gap:10px;padding:15px 0;border-top:1px solid var(--line)}
 .dependency>div:first-child{padding-top:8px}.dependency strong{font-size:12px;font-weight:550}.dependency select,.dependency input{font-size:12px}
 .dependency .check{font-size:11px;padding:2px 0;min-height:28px;margin-top:2px}.dependency .check:hover{background:transparent;text-decoration:underline}
 .status{font-size:11px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}.status:empty{display:none}.error{color:var(--red)!important}.success{color:var(--green)!important}
